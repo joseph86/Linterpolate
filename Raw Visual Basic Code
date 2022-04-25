@@ -1,0 +1,212 @@
+Function LInterpolate(x_range As Range, y_range As Range, new_x As Single, Optional new_y As Variant) As Single
+'
+'Copyright 2014, Joseph Parish
+'This software is distributed under the terms of the GNU General Public License v3
+'
+'This program is distributed in the hope that it will be useful,
+'but WITHOUT ANY WARRANTY; without even the implied warranty of
+'MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+'GNU General Public License for more details.
+'
+'You should have received a copy of the GNU General Public License
+'along with this program.  If not, see <http://www.gnu.org/licenses/>.
+'
+'Author: Joseph Parish
+'josephparish@gmail.com
+'noodlepush.wordpress.com
+'March 2014
+'
+'
+'x_range and y_range need to be in ascending order
+'defaults to single dimesion interpolation when no new_y is passed
+'for 2D interpolation, x_range and y_range need to be perpendicular,
+' meaning they cannot both be either a single column or a single row
+'throws an error if it tries to interpolate from empty cells in the 2D table
+    
+'Does not:
+'handle non contiguous or compound ranges
+'extrapolate for new_x or new_y outside range boundaries or when there are empty cells in the 2D table
+    
+    Dim index As Integer
+    Dim low_x As Integer
+    Dim high_x As Integer
+    Dim dx As Single
+    Dim slope As Single
+     
+    'make sure x_range and y_range are only a single row or single column
+    If (x_range.Rows.Count > 1 And x_range.Columns.Count > 1) _
+        Or (y_range.Rows.Count > 1 And y_range.Columns.Count > 1) Then
+        MsgBox "Ranges must be one-dimensional"
+        LInterpolate = CVErr(xlErrValue)
+        Exit Function
+    End If
+        
+    'don't allow any ranges with fewer than 2 values. Single cell interpolation is just silly
+    If x_range.Count = 1 Or y_range.Count = 1 Then
+        MsgBox "Ranges must contain more than one cell"
+        LInterpolate = CVErr(xlErrValue)
+        Exit Function
+    End If
+    
+    'make sure that x_range and y_range are perpendicular for 2D interpolation
+    If Not IsMissing(new_y) _
+        And (x_range.Rows.Count = y_range.Rows.Count _
+        Or x_range.Columns.Count = y_range.Columns.Count) Then
+        MsgBox "Ranges must be perpendicular for 2D interpolation"
+        LInterpolate = CVErr(xlErrValue)
+        Exit Function
+    End If
+    
+    'find where new_x fits
+    index = 1
+    Do While index <= x_range.Count
+        If new_x <= x_range(index) Then
+            Exit Do
+        End If
+        index = index + 1
+    Loop
+    'if index = 1 new_x is an exact match at index or out of range at the bottom end
+    'if index > x_range.Count, new_x is out of range on the top end
+    
+    high_x = index
+    low_x = index - 1
+    'always make dx the difference from the higher value
+    dx = new_x - x_range(high_x) 'works even if high_x is out of bounds
+    
+    'dx will be 0 if and only if there is an exact match
+    If (index > x_range.Count Or index = 1) And dx <> 0 Then
+        'out of bounds
+        LInterpolate = CVErr(xlErrValue)
+        Exit Function
+    End If
+    
+    If IsMissing(new_y) Then
+        'this is a single dimensional interpolation
+        
+        slope = (y_range(high_x) - y_range(low_x)) / (x_range(high_x) - x_range(low_x))
+        LInterpolate = dx * slope + y_range(high_x)
+    Else
+        'this is a two-dimensional interpolation
+        'I'm still going to need index, low_x, high_x, dx, so I need new
+        'variables to hold the corresopnding values for the y dimension
+        Dim indey As Integer
+        Dim high_y As Integer
+        Dim low_y As Integer
+        Dim dy As Single
+         
+        'find where new_y fits
+        indey = 1
+        Do While indey <= y_range.Count
+            If new_y <= y_range(indey) Then
+                Exit Do
+            End If
+            indey = indey + 1
+        Loop
+    
+        high_y = indey
+        low_y = indey - 1
+        dy = new_y - y_range(high_y)
+        If (indey > y_range.Count Or indey = 1) And dy <> 0 Then
+            LInterpolate = CVErr(xlErrValue)
+            Exit Function
+        End If
+        
+        'I want to use the range of rows as a reference point and make sure it is named y_range
+        'so I check which is which and swap if necessary
+        If x_range.Columns.Count = 1 Then
+            'x_range is the column
+            'make x_range the lettered columns and y_range the numbered rows
+            Dim tmp As Integer
+            Dim tmp_Range As Range
+            
+            'swap everything
+            tmp = low_x
+            low_x = low_y
+            low_y = tmp
+            tmp = high_x
+            high_x = high_y
+            high_y = tmp
+            tmp = dx
+            dx = dy
+            dy = tmp
+            tmp = new_x
+            new_x = new_y
+            new_y = tmp
+            tmp = index
+            index = indey
+            indey = tmp
+            
+            Set tmp_Range = x_range
+            Set x_range = y_range
+            Set y_range = tmp_Range
+        End If
+        
+        'we don't know where x_range and y_range are relative to eachother, so lets figure that out
+        Dim LRshift As Integer
+        LRshift = x_range.Column - y_range.Column
+        'now I can use y_range and LRshift on the column values to reference values from the table
+        
+        'interpolate
+        Dim low_y_value As Single
+        Dim high_y_value As Single
+        
+        'make sure I'm interpolating from real data, and not just empty cells
+        If dx = 0 And dy = 0 Then
+            'exact match on both counts. 'done
+            LInterpolate = y_range(indey, index + LRshift)
+            If LInterpolate = "" Then
+                LInterpolate = CVErr(xlErrValue)
+            End If
+            Exit Function
+        ElseIf dy = 0 Then
+            'easy 1D interpolate and done
+            'I have an exact match only on the y_range
+            'indey will still have the index of the exact match
+            'unless one of those is an empty cell, I can interpolate
+            
+            If y_range(indey, low_x + LRshift) = "" Or y_range(indey, high_x + LRshift) = "" Then
+                LInterpolate = CVErr(xlErrValue)
+                Exit Function
+            End If
+            slope = (y_range(high_y, high_x + LRshift) - y_range(high_y, low_x + LRshift)) / (x_range(high_x) - x_range(low_x))
+            LInterpolate = dx * slope + y_range(high_y, high_x + LRshift)
+            Exit Function
+        ElseIf dx = 0 Then
+            'easy high_y_value and low_y_value and finish later
+            'I have an exact match only on the x_range
+            'index will still have the index of the exact match
+            'unless one of those two is an empty cell, interpolation is possible
+            
+            low_y_value = y_range(low_y, index + LRshift)
+            high_y_value = y_range(high_y, index + LRshift)
+            If low_y_value = "" Or high_y_value = "" Then
+                LInterpolate = CVErr(xlErrValue)
+                Exit Function
+            End If
+        
+        ElseIf y_range(low_y, low_x + LRshift) = "" _
+            Or y_range(low_y, high_x + LRshift) = "" _
+            Or y_range(high_y, low_x + LRshift) = "" _
+            Or y_range(high_y, high_x + LRshift) = "" Then
+            'there is an empty cell and no exact matches reduce the number of required cells to 2.
+            'I can't 2D interpolate with fewer than 4 data points
+            
+            LInterpolate = CVErr(xlErrValue)
+            Exit Function
+        Else
+            'there are no empty cells and no exact matches, so this is full on 2D interpolation
+            
+            slope = (y_range(low_y, high_x + LRshift) - y_range(low_y, low_x + LRshift)) / (x_range(high_x) - x_range(low_x))
+            low_y_value = dx * slope + y_range(low_y, high_x + LRshift)
+            
+            slope = (y_range(high_y, high_x + LRshift) - y_range(high_y, low_x + LRshift)) / (x_range(high_x) - x_range(low_x))
+            high_y_value = dx * slope + y_range(high_y, high_x + LRshift)
+        End If
+        
+        'finish it off with the final calculation
+        slope = (high_y_value - low_y_value) / (y_range(high_y) - y_range(low_y))
+        LInterpolate = dy * slope + high_y_value
+        
+    End If 'two-dimensional array
+        
+End Function
