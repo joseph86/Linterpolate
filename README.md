@@ -1,6 +1,8 @@
 # Linterpolate
 2-dimensional interpolation add-in for Excel written in Visual Basic
 
+This was originally written for the purpose of calculating the energy content of steam. It works with reasonable accuracy for that purpose and is perhaps a little better than straight nearest neighbor estimation. However, there is room for improvement.
+
 Excel doesn't have a built in function dedicated to linear interpolation. It's still possible to do it, but it can be cumbersome. Normally, I would just complain and use the tools provided to muddle through, but I came upon a situation where writing a custom function was less work than creating the convoluted monster of standard excel functions required to do what I wanted to do, 2D linear interpolation.  Introducing LInterpolate.
 
 
